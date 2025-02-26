@@ -1,22 +1,31 @@
 import { Telegraf } from 'telegraf';
-import { message } from 'telegraf/filters';
-import connectDB from './db/mongo';
-import { setupStartMenu } from './menus';
-import { handleAddAccount, handleAccountSelection } from './handlers/accounts';
-import { handleDeployStart } from './handlers/deploy';
+import config from './config.js';
+import connectDB from './db/mongo.js';
+import { setupStartMenu } from './menus.js';
+import { 
+  handleAddAccount,
+  handleAccountSelection 
+} from './handlers/accounts.js';
+import { handleDeployStart } from './handlers/deploy.js';
 
-// Initialize
-const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
+// Initialize bot with config
+const bot = new Telegraf(config.telegram.token);
+
+// Database connection
 connectDB();
 
-// Auto-set webhook on Koyeb
+// Auto-configure webhook on Koyeb
 if (process.env.KOYEB_SERVICE_DOMAIN) {
-  const webhookUrl = `https://${process.env.KOYEB_SERVICE_DOMAIN}/webhook`;
+  const webhookUrl = `${config.koyeb.serviceUrl}${config.telegram.webhookPath}`;
   bot.telegram.setWebhook(webhookUrl);
-  bot.startWebhook('/webhook', null, process.env.PORT || 3000);
+  bot.startWebhook(
+    config.telegram.webhookPath,
+    null,
+    config.telegram.port
+  );
 }
 
-// Start menu with buttons
+// Start command with interactive menu
 bot.start(async (ctx) => {
   await ctx.reply(
     '🚀 **Koyeb Manager Bot**\nManage apps across multiple accounts!',
@@ -24,10 +33,20 @@ bot.start(async (ctx) => {
   );
 });
 
-// Assign handlers
+// Register action handlers
 bot.action('add_account', handleAddAccount);
 bot.action('deploy_new', handleDeployStart);
 bot.action(/select_account:(.+)/, handleAccountSelection);
 
+// Error handling
+bot.catch((err, ctx) => {
+  console.error(`Error for ${ctx.updateType}:`, err);
+  ctx.reply('❌ An error occurred. Please try again.');
+});
+
 // Start bot
-bot.launch();
+if (process.env.NODE_ENV === 'development') {
+  bot.launch(); // Polling mode for local dev
+} else {
+  console.log('Webhook server running on port', config.telegram.port);
+}
